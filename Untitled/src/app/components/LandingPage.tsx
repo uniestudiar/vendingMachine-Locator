@@ -14,6 +14,12 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-4">
               <Link
+                to="/how-it-works"
+                className="text-gray-700 hover:text-indigo-600 font-medium transition-colors"
+              >
+                How It Works
+              </Link>
+              <Link
                 to="/dashboard"
                 className="text-gray-700 hover:text-indigo-600 font-medium transition-colors"
               >
@@ -83,7 +89,7 @@ export default function LandingPage() {
               </div>
             </div>
             <p className="text-lg font-medium bg-white/10 backdrop-blur rounded-lg p-4">
-              💡 Our database contains extensively researched locations with contact information, foot traffic estimates, and ranked viability scores. Access requires a one-time payment to unlock your area's complete lead package.
+              💡 Our database contains extensively researched locations with contact information, foot traffic estimates, and ranked viability scores. Access requires a one-time payment to unlock your area.
             </p>
           </div>
         </div>
@@ -213,7 +219,7 @@ export default function LandingPage() {
               ))}
             </div>
             <p className="text-gray-700 mb-4">
-              "I already had 8 machines running, but finding new locations was becoming impossible. Used VendLocate to expand into neighboring cities and added 6 more placements in just one month. This paid for itself instantly."
+              "I already had 8 machines running, but finding new locations was becoming impossible. Used VendLocate to expand into neighboring cities and added 6 more placements in just one month."
             </p>
             <div className="font-semibold text-gray-900">- James P.</div>
             <div className="text-sm text-gray-600">Phoenix, AZ</div>
@@ -259,6 +265,7 @@ export default function LandingPage() {
               <h4 className="text-white font-semibold mb-4">Quick Links</h4>
               <ul className="space-y-2 text-sm">
                 <li><Link to="/register" className="hover:text-indigo-400 transition-colors">Get Started</Link></li>
+                <li><Link to="/how-it-works" className="hover:text-indigo-400 transition-colors">How It Works</Link></li>
                 <li><Link to="/login" className="hover:text-indigo-400 transition-colors">Login</Link></li>
                 <li><Link to="/dashboard" className="hover:text-indigo-400 transition-colors">Dashboard</Link></li>
               </ul>
