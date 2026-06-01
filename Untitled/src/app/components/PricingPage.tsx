@@ -96,25 +96,39 @@ const BUSINESS_TYPES: BusinessType[] = [
 ];
 
 const RADIUS_OPTIONS = [
-  { miles: 5, price: 197, label: '5 miles' },
-  { miles: 10, price: 297, label: '10 miles', popular: true },
-  { miles: 15, price: 397, label: '15 miles' },
-  { miles: 20, price: 497, label: '20 miles' },
-  { miles: 25, price: 597, label: '25 miles' },
+  { miles: 5, price: 97, label: '5 miles', description: 'Perfect for urban areas' },
+  { miles: 10, price: 197, label: '10 miles', description: 'Most popular choice', popular: true },
+  { miles: 15, price: 297, label: '15 miles', description: '~20 min drive' },
+  { miles: 20, price: 397, label: '20 miles', description: '~30 min drive' },
+  { miles: 30, price: 497, label: '30 miles', description: 'Large territory' },
 ];
 
 const EXTRA_SELECTION_PRICE = 29;
 
-type Step = 'radius' | 'locations' | 'payment' | 'complete';
+type Step = 'location' | 'radius' | 'businesses' | 'payment' | 'complete';
+
+interface UserLocation {
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
 
 export default function PricingPage() {
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<Step>('radius');
+  const [currentStep, setCurrentStep] = useState<Step>('location');
   const [selectedRadius, setSelectedRadius] = useState(10);
   const [selectedBusinessTypes, setSelectedBusinessTypes] = useState<string[]>([]);
   const [extraSelections, setExtraSelections] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+
+  const [locationData, setLocationData] = useState<UserLocation>({
+    address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+  });
 
   const [paymentData, setPaymentData] = useState({
     cardNumber: '',
@@ -123,37 +137,38 @@ export default function PricingPage() {
     cvv: '',
   });
 
-  const [locationData, setLocationData] = useState({
-    address: '',
-    city: '',
-    state: '',
-    zipCode: '',
-  });
+  const [isFirstPurchase, setIsFirstPurchase] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in
     const currentUser = localStorage.getItem('vendlocate_current_user');
     if (!currentUser) {
       navigate('/login');
       return;
     }
 
-    // Check if user has already purchased
     const user = JSON.parse(currentUser);
     const purchases = JSON.parse(localStorage.getItem('vendlocate_purchases') || '[]');
     const userPurchase = purchases.find((p: any) => p.userId === user.id);
 
-    if (userPurchase) {
-      navigate('/dashboard');
+    if (userPurchase && isFirstPurchase) {
+      setIsFirstPurchase(false);
+      // Load their existing location and radius
+      if (userPurchase.location) {
+        setLocationData(userPurchase.location);
+      }
+      if (userPurchase.radius) {
+        setSelectedRadius(userPurchase.radius);
+      }
     }
 
+    // Load saved location if exists
     const savedLocation = localStorage.getItem('vendlocate_saved_location');
     if (savedLocation) {
       setLocationData(JSON.parse(savedLocation));
     }
-  }, [navigate]);
+  }, [navigate, isFirstPurchase]);
 
-  const basePrice = RADIUS_OPTIONS.find((r) => r.miles === selectedRadius)?.price || 297;
+  const basePrice = RADIUS_OPTIONS.find((r) => r.miles === selectedRadius)?.price || 197;
   const premiumTypesPrice = selectedBusinessTypes
     .filter((id) => BUSINESS_TYPES.find((bt) => bt.id === id)?.isPremium)
     .reduce((sum, id) => sum + (BUSINESS_TYPES.find((bt) => bt.id === id)?.premiumPrice || 0), 0);
@@ -174,7 +189,6 @@ export default function PricingPage() {
     if (selectedBusinessTypes.includes(typeId)) {
       setSelectedBusinessTypes(selectedBusinessTypes.filter((id) => id !== typeId));
     } else {
-      // Check if we have room
       const currentStandardSelected = selectedBusinessTypes.filter(
         (id) => !BUSINESS_TYPES.find((bt) => bt.id === id)?.isPremium
       ).length;
@@ -204,6 +218,7 @@ export default function PricingPage() {
         location: locationData,
         totalPrice,
         purchaseDate: new Date().toISOString(),
+        unlockedRadii: [selectedRadius],
       };
 
       purchases.push(newPurchase);
@@ -236,22 +251,22 @@ export default function PricingPage() {
           localStorage.setItem('vendlocate_purchases', JSON.stringify(purchases));
         }
       } catch {
-        // Keep local progress if Supabase is unavailable in development.
+        // Keep local progress if Supabase is unavailable
       }
 
       setIsProcessing(false);
-      navigate('/onboarding');
+      navigate('/dashboard');
     } catch (err: any) {
       setPaymentError(err.message || 'Payment failed. Please try again.');
       setIsProcessing(false);
     }
   };
 
-  // Radius Selection Step
-  if (currentStep === 'radius') {
+  // Location Step
+  if (currentStep === 'location') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-2xl mx-auto">
           <Link
             to="/dashboard"
             className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 mb-6 font-medium"
@@ -260,15 +275,120 @@ export default function PricingPage() {
             Back to Dashboard
           </Link>
 
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MapPin className="w-8 h-8 text-indigo-600" />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Location</h1>
+              <p className="text-gray-600">
+                {isFirstPurchase
+                  ? 'Enter your location once. We'll remember it for all future searches.'
+                  : 'Update your location anytime. This affects your search center point.'}
+              </p>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setCurrentStep('radius');
+              }}
+              className="space-y-6"
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Street Address</label>
+                <input
+                  type="text"
+                  required
+                  value={locationData.address}
+                  onChange={(e) => setLocationData({ ...locationData, address: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="123 Main St"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                  <input
+                    type="text"
+                    required
+                    value={locationData.city}
+                    onChange={(e) => setLocationData({ ...locationData, city: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Springfield"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
+                  <input
+                    type="text"
+                    required
+                    value={locationData.state}
+                    onChange={(e) => setLocationData({ ...locationData, state: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="IL"
+                    maxLength={2}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">ZIP Code</label>
+                  <input
+                    type="text"
+                    required
+                    value={locationData.zipCode}
+                    onChange={(e) => setLocationData({ ...locationData, zipCode: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="62701"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-900">
+                  <strong>Your location is your search center point.</strong> All searches are measured from this address. You can update it anytime.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-indigo-600 text-white py-4 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+              >
+                Continue to Search Distance
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Radius Selection Step
+  if (currentStep === 'radius') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+        <div className="max-w-6xl mx-auto">
+          <button
+            onClick={() => setCurrentStep('location')}
+            className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 mb-6 font-medium"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Location
+          </button>
+
           <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Choose Your Search Radius</h1>
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">Choose Your Search Distance</h1>
             <p className="text-xl text-gray-600">
-              How far from your location should we search for vending machine opportunities?
+              Pay more to unlock searches farther from {locationData.city}, {locationData.state}
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              Larger search areas cost more because the program scans more businesses, finds more contact data, and
-              builds a larger lead database for your account.
+              Larger search areas cost more because the program scans more businesses and finds more leads for your account.
             </p>
+            {!isFirstPurchase && (
+              <p className="text-sm text-indigo-600 mt-3 font-medium">
+                You can unlock additional distances anytime by paying more.
+              </p>
+            )}
           </div>
 
           <div className="grid md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
@@ -288,9 +408,9 @@ export default function PricingPage() {
                   </div>
                 )}
                 <MapPin className="w-10 h-10 text-indigo-600 mx-auto mb-3" />
-                <div className="text-3xl font-bold text-gray-900 mb-2">${option.price}</div>
+                <div className="text-3xl font-bold text-gray-900 mb-1">${option.price}</div>
                 <div className="text-lg font-semibold text-gray-700 mb-1">{option.label}</div>
-                <div className="text-sm text-gray-500">Search radius</div>
+                <div className="text-xs text-gray-500 mb-2">{option.description}</div>
                 {selectedRadius === option.miles && (
                   <CheckCircle className="w-6 h-6 text-indigo-600 absolute top-4 right-4" />
                 )}
@@ -299,7 +419,7 @@ export default function PricingPage() {
           </div>
 
           <div className="bg-white rounded-xl shadow-md p-6 mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">What's Included</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">What's Included at {selectedRadius} Miles</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
@@ -329,18 +449,18 @@ export default function PricingPage() {
           </div>
 
           <button
-            onClick={() => setCurrentStep('locations')}
+            onClick={() => setCurrentStep('businesses')}
             className="w-full bg-indigo-600 text-white py-4 rounded-lg text-lg font-semibold hover:bg-indigo-700 transition-colors"
           >
-            Continue to Location Selection
+            Continue to Business Selection
           </button>
         </div>
       </div>
     );
   }
 
-  // Location Selection Step
-  if (currentStep === 'locations') {
+  // Business Types Step
+  if (currentStep === 'businesses') {
     const standardTypes = BUSINESS_TYPES.filter((bt) => !bt.isPremium);
     const premiumTypes = BUSINESS_TYPES.filter((bt) => bt.isPremium);
 
@@ -352,7 +472,7 @@ export default function PricingPage() {
             className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 mb-6 font-medium"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Radius Selection
+            Back to Distance Selection
           </button>
 
           <div className="text-center mb-8">
@@ -439,7 +559,9 @@ export default function PricingPage() {
           <div className="mb-8">
             <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl p-6 mb-4 text-white">
               <div className="flex items-start gap-4">
-                <Star className="w-8 h-8 flex-shrink-0" />
+                <div className="w-8 h-8 flex-shrink-0">
+                  <Star className="w-8 h-8" />
+                </div>
                 <div>
                   <h3 className="text-2xl font-bold mb-2">Premium Locations - Best ROI</h3>
                   <p className="text-amber-50 mb-3">
@@ -498,7 +620,7 @@ export default function PricingPage() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Summary</h3>
             <div className="space-y-2 mb-4">
               <div className="flex justify-between text-gray-700">
-                <span>{selectedRadius} mile radius</span>
+                <span>{selectedRadius} mile search radius</span>
                 <span>${basePrice}</span>
               </div>
               {extraSelections > 0 && (
@@ -540,11 +662,11 @@ export default function PricingPage() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
         <div className="max-w-3xl mx-auto">
           <button
-            onClick={() => setCurrentStep('locations')}
+            onClick={() => setCurrentStep('businesses')}
             className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 mb-6 font-medium"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Location Selection
+            Back to Business Selection
           </button>
 
           <div className="bg-white rounded-2xl shadow-xl p-8">
@@ -591,7 +713,7 @@ export default function PricingPage() {
               </div>
             </div>
 
-            {/* Location Form */}
+            {/* Payment Form */}
             <form onSubmit={handlePayment} className="space-y-6">
               {paymentError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
@@ -600,55 +722,19 @@ export default function PricingPage() {
               )}
 
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Location</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  This is saved to your account and reused for future searches, so you only need to enter it once.
-                </p>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Street Address</label>
-                    <input
-                      type="text"
-                      required
-                      value={locationData.address}
-                      onChange={(e) => setLocationData({ ...locationData, address: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="123 Main St"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
-                    <input
-                      type="text"
-                      required
-                      value={locationData.city}
-                      onChange={(e) => setLocationData({ ...locationData, city: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Springfield"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
-                    <input
-                      type="text"
-                      required
-                      value={locationData.state}
-                      onChange={(e) => setLocationData({ ...locationData, state: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="IL"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">ZIP Code</label>
-                    <input
-                      type="text"
-                      required
-                      value={locationData.zipCode}
-                      onChange={(e) => setLocationData({ ...locationData, zipCode: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="62701"
-                    />
-                  </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Your Location</h3>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <p className="text-sm text-gray-700">
+                    <strong>Address:</strong> {locationData.address}, {locationData.city}, {locationData.state}{' '}
+                    {locationData.zipCode}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep('location')}
+                    className="text-indigo-600 hover:text-indigo-700 text-sm font-medium mt-2"
+                  >
+                    Change Location
+                  </button>
                 </div>
               </div>
 
@@ -711,8 +797,8 @@ export default function PricingPage() {
                 <div className="flex items-start gap-3">
                   <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                   <div className="text-sm text-green-800">
-                    <strong>100% Secure Payment</strong> - Your payment information is encrypted and secure.
-                    We never store your credit card details.
+                    <strong>100% Secure Payment</strong> - Your payment information is encrypted and secure. We never
+                    store your credit card details.
                   </div>
                 </div>
               </div>
@@ -745,6 +831,5 @@ export default function PricingPage() {
     );
   }
 
-  // Complete Step - This is now skipped, we go straight to onboarding
   return null;
 }
