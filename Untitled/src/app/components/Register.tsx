@@ -36,7 +36,7 @@ export default function Register() {
         password: formData.password,
         options: {
           data: {
-            name: formData.name,
+            full_name: formData.name,
           },
         },
       });
@@ -45,17 +45,12 @@ export default function Register() {
         throw signUpError;
       }
 
-      const userId = data.user?.id || data.session?.user.id;
+      const userId = data.user?.id;
       if (!userId) {
-        throw new Error('Account created, but Supabase did not return a user session. Please log in.');
+        throw new Error('Account creation failed. Please try again.');
       }
 
-      await supabase.from('users').upsert({
-        id: userId,
-        email: formData.email,
-        full_name: formData.name,
-      });
-
+      // Store user info locally
       localStorage.setItem(
         'vendlocate_current_user',
         JSON.stringify({
@@ -65,10 +60,31 @@ export default function Register() {
         })
       );
 
+      // Try to sync to Supabase, but don't fail if it doesn't work
+      try {
+        await supabase.from('users').upsert({
+          id: userId,
+          email: formData.email,
+          full_name: formData.name,
+        });
+      } catch (dbError) {
+        console.log('Local storage saved, Supabase sync will occur on next login');
+      }
+
       setIsLoading(false);
       navigate('/pricing');
     } catch (err: any) {
-      setError(err.message || 'Registration failed. Please try again.');
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      if (err.message.includes('already registered')) {
+        errorMessage = 'This email is already registered. Please log in instead.';
+      } else if (err.message.includes('Invalid email')) {
+        errorMessage = 'Please enter a valid email address.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
       setIsLoading(false);
     }
   };

@@ -22,6 +22,8 @@ import {
   KeyRound,
   Save,
   Loader2,
+  MapPinPlus,
+  Sliders,
 } from 'lucide-react';
 
 interface Lead {
@@ -64,6 +66,13 @@ interface OutreachSettings {
   smtpAppPassword: string;
 }
 
+interface SearchSettings {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  enabledBusinessTypes: string[];
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
@@ -79,8 +88,15 @@ export default function AdminDashboard() {
     outreachEmail: '',
     smtpAppPassword: '',
   });
+  const [searchSettings, setSearchSettings] = useState<SearchSettings>({
+    latitude: 0,
+    longitude: 0,
+    radiusMeters: 22000,
+    enabledBusinessTypes: [],
+  });
   const [settingsStatus, setSettingsStatus] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isSavingSearchSettings, setIsSavingSearchSettings] = useState(false);
 
   const [businessTypes, setBusinessTypes] = useState<BusinessType[]>([
     {
@@ -167,6 +183,11 @@ export default function AdminDashboard() {
       const savedSettings = localStorage.getItem('vendlocate_outreach_settings');
       if (savedSettings) {
         setSettings((current) => ({ ...current, ...JSON.parse(savedSettings) }));
+      }
+
+      const savedSearchSettings = localStorage.getItem('vendlocate_search_settings');
+      if (savedSearchSettings) {
+        setSearchSettings(JSON.parse(savedSearchSettings));
       }
 
       try {
@@ -297,6 +318,27 @@ export default function AdminDashboard() {
     }
   };
 
+  const saveSearchSettings = async () => {
+    setIsSavingSearchSettings(true);
+    try {
+      const enabledTypes = businessTypes.filter((bt) => bt.enabled).map((bt) => bt.name);
+      const updatedSearchSettings = {
+        ...searchSettings,
+        enabledBusinessTypes: enabledTypes,
+      };
+      localStorage.setItem('vendlocate_search_settings', JSON.stringify(updatedSearchSettings));
+      await apiCall('/search-settings', {
+        method: 'POST',
+        body: JSON.stringify(updatedSearchSettings),
+      });
+      setSettingsStatus('Search settings synchronized with discovery program.');
+    } catch {
+      setSettingsStatus('Search settings saved locally.');
+    } finally {
+      setIsSavingSearchSettings(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -345,8 +387,8 @@ export default function AdminDashboard() {
                   : 'border-transparent text-gray-600 hover:text-gray-900'
               }`}
             >
-              <Settings className="w-4 h-4 inline mr-2" />
-              Business Filters
+              <Sliders className="w-4 h-4 inline mr-2" />
+              Search Settings
             </button>
             <button
               onClick={() => setCurrentTab('noWebsites')}
@@ -595,15 +637,15 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {/* Business Filters Tab */}
+        {/* Search Settings Tab */}
         {currentTab === 'filters' && (
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Business Type Filters</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">Search Settings</h2>
                   <p className="text-gray-600 mt-1">
-                    Customize which types of businesses we search for when finding vending machine locations
+                    Configure which business types are included when the discovery program runs. Changes take effect on the next scan.
                   </p>
                 </div>
                 <button
@@ -635,7 +677,7 @@ export default function AdminDashboard() {
                             onChange={(e) => updateBusinessType(bt.id, { enabled: e.target.checked })}
                             className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                           />
-                          <span className="text-sm text-gray-700">Enabled</span>
+                          <span className="text-sm text-gray-700">Include in Search</span>
                         </label>
                         <button
                           onClick={() => deleteBusinessType(bt.id)}
@@ -689,6 +731,15 @@ export default function AdminDashboard() {
                   </div>
                 ))}
               </div>
+
+              <button
+                onClick={saveSearchSettings}
+                disabled={isSavingSearchSettings}
+                className="mt-6 inline-flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:bg-gray-400"
+              >
+                {isSavingSearchSettings ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                Save Search Settings
+              </button>
             </div>
           </div>
         )}
@@ -722,7 +773,7 @@ export default function AdminDashboard() {
                     <li className="flex items-start gap-2">
                       <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                       <span>
-                        <strong className="text-white">Decision Makers On-Site:</strong> Small businesses without websites often have owners working on-location. You can pitch directly to the person who says yes.
+                        <strong className="text-white">Decision Makers On-Site:</strong> Small businesses without websites often have owners working on-location. You can pitch directly to the person with authority.
                       </span>
                     </li>
                     <li className="flex items-start gap-2">
@@ -900,46 +951,65 @@ export default function AdminDashboard() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-1">Automatic Database Sync</h2>
               <p className="text-gray-600 mb-6">
-                There is nothing for the user to upload or export. The Python program writes the lead database and
-                sent-email database into Supabase during the run.
+                The Python program automatically writes all data to Supabase. There's nothing you need to upload or export.
               </p>
 
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-3 gap-4 mb-6">
                 <div className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="w-5 h-5 text-indigo-600" />
-                    <h3 className="font-semibold text-gray-900">Lead rows</h3>
+                  <div className="flex items-center gap-2 mb-3">
+                    <MapPinPlus className="w-5 h-5 text-indigo-600" />
+                    <h3 className="font-semibold text-gray-900">Lead Data</h3>
                   </div>
-                  <p className="text-sm text-gray-600">
-                    Example: name, address, website, phone, email, business type, distance, and profit score.
+                  <p className="text-sm text-gray-600 mb-3">
+                    Each discovered business is stored with:
                   </p>
+                  <ul className="text-xs text-gray-600 space-y-1">
+                    <li>• Business name & address</li>
+                    <li>• Contact email & phone</li>
+                    <li>• Business type category</li>
+                    <li>• Distance from your location</li>
+                    <li>• Profitability ranking score</li>
+                  </ul>
                 </div>
 
                 <div className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-3">
                     <Send className="w-5 h-5 text-indigo-600" />
-                    <h3 className="font-semibold text-gray-900">Outreach history</h3>
+                    <h3 className="font-semibold text-gray-900">Outreach History</h3>
                   </div>
-                  <p className="text-sm text-gray-600">
-                    Example: each sent email is stored once so the system will not contact the same place twice.
+                  <p className="text-sm text-gray-600 mb-3">
+                    Each email sent is recorded:
                   </p>
+                  <ul className="text-xs text-gray-600 space-y-1">
+                    <li>• Email address sent to</li>
+                    <li>• Date & time sent</li>
+                    <li>• Prevents duplicate contact</li>
+                    <li>• Tracks response status</li>
+                    <li>• Follow-up timing</li>
+                  </ul>
                 </div>
 
                 <div className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Clock className="w-5 h-5 text-indigo-600" />
-                    <h3 className="font-semibold text-gray-900">Run status</h3>
+                  <div className="flex items-center gap-2 mb-3">
+                    <TrendingUp className="w-5 h-5 text-indigo-600" />
+                    <h3 className="font-semibold text-gray-900">Real-Time Updates</h3>
                   </div>
-                  <p className="text-sm text-gray-600">
-                    Example: when the scan finishes, the dashboard updates from empty to ranked live results.
+                  <p className="text-sm text-gray-600 mb-3">
+                    Dashboard updates automatically:
                   </p>
+                  <ul className="text-xs text-gray-600 space-y-1">
+                    <li>• Starts empty (no fake data)</li>
+                    <li>• Populates after first scan</li>
+                    <li>• Shows live results only</li>
+                    <li>• Updates as emails send</li>
+                    <li>• Tracks all interactions</li>
+                  </ul>
                 </div>
               </div>
 
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mt-6">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
                 <p className="text-sm text-indigo-900">
-                  Before the first run, this page is intentionally empty of fake businesses. After the run, it will
-                  show real businesses found inside the purchased search radius.
+                  <strong>Before your first scan:</strong> This dashboard will be empty—no dummy data, no sample businesses. After the discovery program completes, you'll see all real businesses found within your purchased search radius with their rankings and contact information ready for outreach.
                 </p>
               </div>
             </div>
